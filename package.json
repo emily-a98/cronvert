@@ -1,0 +1,14 @@
+{
+  "name": "cronvert",
+  "version": "0.1.0",
+  "description": "Convert cron expressions between unix cron and quartz cron.",
+  "private": true,
+  "license": "MIT",
+  "main": "dist/cli.js",
+  "bin": {
+    "cronvert": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc"
+  }
+}
