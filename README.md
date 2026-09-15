@@ -86,3 +86,13 @@ hand:
 tsc
 node dist/cli.js "30 4 * * 1-5" --to quartz
 ```
+
+## Testing
+
+Tests use Node's built-in test runner, so there's nothing extra to install:
+
+```
+npm test
+```
+
+which compiles the project and then runs every `*.test.js` file under `dist`.

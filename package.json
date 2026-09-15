@@ -9,6 +9,7 @@
     "cronvert": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "tsc && node --test dist"
   }
 }
