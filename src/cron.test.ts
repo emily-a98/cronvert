@@ -89,3 +89,34 @@ test('formatCron collapses a full-range step back to a star', () => {
   const expression = '*/15 * * * *'
   assert.equal(formatCron(parseCron(expression, 'unix')), expression)
 })
+
+test('parses quartz "L" and "L-n" in day-of-month', () => {
+  assert.deepEqual(parseCron('0 0 0 L * ?', 'quartz').dayOfMonth, [{ kind: 'lastDayOfMonth' }])
+  assert.deepEqual(parseCron('0 0 0 L-3 * ?', 'quartz').dayOfMonth, [{ kind: 'lastDayOfMonth', offset: 3 }])
+})
+
+test('parses quartz "LW" and "nW" in day-of-month', () => {
+  assert.deepEqual(parseCron('0 0 0 LW * ?', 'quartz').dayOfMonth, [{ kind: 'lastWeekdayOfMonth' }])
+  assert.deepEqual(parseCron('0 0 0 15W * ?', 'quartz').dayOfMonth, [{ kind: 'nearestWeekday', day: 15 }])
+})
+
+test('parses quartz "xL" and "x#n" in day-of-week', () => {
+  assert.deepEqual(parseCron('0 0 0 ? * 6L', 'quartz').dayOfWeek, [{ kind: 'lastWeekdayInMonth', day: 6 }])
+  assert.deepEqual(parseCron('0 0 0 ? * MON#2', 'quartz').dayOfWeek, [{ kind: 'nthWeekdayInMonth', day: 2, n: 2 }])
+})
+
+test('rejects an out-of-range "L-n" offset and "#n" occurrence', () => {
+  assert.throws(() => parseCron('0 0 0 L-31 * ?', 'quartz'), /invalid "L-n" offset/)
+  assert.throws(() => parseCron('0 0 0 ? * MON#6', 'quartz'), /invalid occurrence/)
+})
+
+test('rejects unix day-of-month/day-of-week modifiers, since they are quartz-only', () => {
+  assert.throws(() => parseCron('* * L * *', 'unix'), /invalid value "L"/)
+  assert.throws(() => parseCron('* * * * 6L', 'unix'), /invalid value "6L"/)
+})
+
+test('formatCron round-trips quartz day modifiers', () => {
+  for (const expression of ['0 0 0 L * ?', '0 0 0 L-3 * ?', '0 0 0 LW * ?', '0 0 0 15W * ?', '0 0 0 ? * 6L', '0 0 0 ? * 2#3']) {
+    assert.equal(formatCron(parseCron(expression, 'quartz')), expression)
+  }
+})

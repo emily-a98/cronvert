@@ -1,9 +1,11 @@
-import { DOW_NAMES, FieldValue, MONTH_NAMES, ParsedCron, isAny, isUnspecified } from './cron'
+import { DOW_NAMES, FieldValue, MONTH_NAMES, ParsedCron, hasDayModifier, isAny, isUnspecified } from './cron'
 
 function joinList(items: string[]): string {
   if (items.length <= 1) return items[0] ?? ''
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
+
+const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th']
 
 function describeField(values: FieldValue[], min: number, max: number, names?: readonly string[]): string {
   const render = (n: number) => (names ? names[(n - min) % names.length] : String(n))
@@ -21,6 +23,16 @@ function describeField(values: FieldValue[], min: number, max: number, names?: r
         const isFullRange = v.start === min && v.end === max
         return isFullRange ? `every ${v.step}` : `every ${v.step} from ${render(v.start)} through ${render(v.end)}`
       }
+      case 'lastDayOfMonth':
+        return v.offset === undefined ? 'the last day of the month' : `${v.offset} days before the last day of the month`
+      case 'lastWeekdayOfMonth':
+        return 'the last weekday of the month'
+      case 'nearestWeekday':
+        return `the weekday nearest day ${v.day}`
+      case 'lastWeekdayInMonth':
+        return `the last ${render(v.day)} of the month`
+      case 'nthWeekdayInMonth':
+        return `the ${ORDINALS[v.n - 1] ?? `${v.n}th`} ${render(v.day)} of the month`
     }
   })
   return joinList(parts)
@@ -58,7 +70,10 @@ export function describe(parsed: ParsedCron): string {
   }
 
   const clauses = [timeClause]
-  if (isRestricted(parsed.dayOfMonth)) clauses.push(`on day-of-month ${describeField(parsed.dayOfMonth, 1, 31)}`)
+  if (isRestricted(parsed.dayOfMonth)) {
+    const dayOfMonthLabel = hasDayModifier(parsed.dayOfMonth) ? 'on' : 'on day-of-month'
+    clauses.push(`${dayOfMonthLabel} ${describeField(parsed.dayOfMonth, 1, 31)}`)
+  }
   if (isRestricted(parsed.month)) clauses.push(`in ${describeField(parsed.month, 1, 12, MONTH_NAMES)}`)
   if (isRestricted(parsed.dayOfWeek)) {
     const min = parsed.format === 'quartz' ? 1 : 0

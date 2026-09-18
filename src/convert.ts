@@ -1,4 +1,4 @@
-import { FieldValue, ParsedCron, formatCron, isAny, parseCron } from './cron'
+import { FieldValue, ParsedCron, formatCron, hasDayModifier, isAny, parseCron } from './cron'
 
 // Quartz numbers Sunday..Saturday as 1..7; unix numbers the same days 0..6,
 // with 7 accepted as a legacy alias for Sunday.
@@ -14,6 +14,12 @@ function mapDow(values: FieldValue[], fn: (n: number) => number): FieldValue[] {
         return { kind: 'range', start: fn(v.start), end: fn(v.end) }
       case 'step':
         return { kind: 'step', start: fn(v.start), end: fn(v.end), step: v.step }
+      case 'lastDayOfMonth':
+      case 'lastWeekdayOfMonth':
+      case 'nearestWeekday':
+      case 'lastWeekdayInMonth':
+      case 'nthWeekdayInMonth':
+        throw new Error('cannot convert: unix cron has no equivalent of quartz\'s "L", "W" and "#" day modifiers')
     }
   })
 }
@@ -72,6 +78,10 @@ export function quartzToUnix(expression: string): string {
 
   if (parsed.year && !isAny(parsed.year)) {
     throw new Error('cannot convert: unix cron has no year field; remove the year restriction to convert')
+  }
+
+  if (hasDayModifier(parsed.dayOfMonth)) {
+    throw new Error('cannot convert: unix cron has no equivalent of quartz\'s "L" and "W" day-of-month modifiers')
   }
 
   const dayOfMonth: FieldValue[] = parsed.dayOfMonth[0].kind === 'unspecified' ? [{ kind: 'any' }] : parsed.dayOfMonth

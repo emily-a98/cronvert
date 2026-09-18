@@ -54,3 +54,15 @@ test('omits the year clause when the year field is "*"', () => {
 test('describes a step value', () => {
   assert.equal(describe(parseCron('*/15 * * * *', 'unix')), 'At minute every 15 of every hour.')
 })
+
+test('describes quartz day-of-month modifiers', () => {
+  assert.equal(describe(parseCron('0 0 12 L * ?', 'quartz')), 'At 12:00, on the last day of the month.')
+  assert.equal(describe(parseCron('0 0 12 L-3 * ?', 'quartz')), 'At 12:00, on 3 days before the last day of the month.')
+  assert.equal(describe(parseCron('0 0 12 LW * ?', 'quartz')), 'At 12:00, on the last weekday of the month.')
+  assert.equal(describe(parseCron('0 0 12 15W * ?', 'quartz')), 'At 12:00, on the weekday nearest day 15.')
+})
+
+test('describes quartz day-of-week modifiers', () => {
+  assert.equal(describe(parseCron('0 0 12 ? * 6L', 'quartz')), 'At 12:00, on the last FRI of the month.')
+  assert.equal(describe(parseCron('0 0 12 ? * 2#3', 'quartz')), 'At 12:00, on the 3rd MON of the month.')
+})

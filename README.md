@@ -66,10 +66,23 @@ step values (`*/15`, `1-30/5`), and names for months and days of week
 (`JAN`-`DEC`, `SUN`-`SAT`). Quartz's `?` is supported for day-of-month and
 day-of-week.
 
+Quartz's day modifiers are also supported, in day-of-month:
+
+- `L` - the last day of the month
+- `L-3` - 3 days before the last day of the month
+- `LW` - the last weekday of the month
+- `15W` - the weekday nearest day 15
+
+and in day-of-week:
+
+- `6L` - the last Friday of the month
+- `2#3` - the third Monday of the month
+
+These have no unix equivalent, so converting an expression that uses one to
+unix cron is refused rather than approximated.
+
 ## Known limitations (first pass)
 
-- Quartz's `L`, `W`, and `#` modifiers (last day of month, nearest weekday,
-  nth weekday) aren't parsed yet.
 - If a unix expression restricts *both* day-of-month and day-of-week,
   conversion to quartz is refused rather than guessed at, since quartz has
   no direct equivalent of unix's "either" semantics once both fields are

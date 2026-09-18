@@ -17,6 +17,11 @@ export type FieldValue =
   | { kind: 'literal'; value: number }
   | { kind: 'range'; start: number; end: number }
   | { kind: 'step'; start: number; end: number; step: number }
+  | { kind: 'lastDayOfMonth'; offset?: number } // "L" or "L-n" - quartz day-of-month only
+  | { kind: 'lastWeekdayOfMonth' } // "LW" - quartz day-of-month only
+  | { kind: 'nearestWeekday'; day: number } // "nW" - quartz day-of-month only
+  | { kind: 'lastWeekdayInMonth'; day: number } // "xL" - quartz day-of-week only
+  | { kind: 'nthWeekdayInMonth'; day: number; n: number } // "x#n" - quartz day-of-week only
 
 export interface ParsedCron {
   format: CronFormat
@@ -38,6 +43,19 @@ export function isAny(values: FieldValue[]): boolean {
 
 export function isUnspecified(values: FieldValue[]): boolean {
   return values.length === 1 && values[0].kind === 'unspecified'
+}
+
+const DAY_MODIFIER_KINDS = new Set<FieldValue['kind']>([
+  'lastDayOfMonth',
+  'lastWeekdayOfMonth',
+  'nearestWeekday',
+  'lastWeekdayInMonth',
+  'nthWeekdayInMonth',
+])
+
+// True if any value uses one of quartz's L/W/# day modifiers, which have no unix equivalent.
+export function hasDayModifier(values: FieldValue[]): boolean {
+  return values.some((v) => DAY_MODIFIER_KINDS.has(v.kind))
 }
 
 function resolveToken(token: string, fieldName: string, min: number, max: number, names?: readonly string[]): number {
@@ -66,9 +84,75 @@ function parseRange(token: string, fieldName: string, min: number, max: number, 
   return { start, end }
 }
 
-function parseFieldPart(part: string, fieldName: string, min: number, max: number, names?: readonly string[]): FieldValue {
+type DayModifierField = 'dayOfMonth' | 'dayOfWeek'
+
+// "L", "L-n" (n days before the last day), and "LW" (last weekday) - quartz day-of-month only.
+function parseDayOfMonthModifier(part: string): FieldValue | undefined {
+  if (part === 'L') return { kind: 'lastDayOfMonth' }
+  if (part === 'LW') return { kind: 'lastWeekdayOfMonth' }
+
+  const offsetMatch = part.match(/^L-(\d+)$/)
+  if (offsetMatch) {
+    const offset = Number(offsetMatch[1])
+    if (offset < 1 || offset > 30) {
+      throw new Error(`invalid "L-n" offset "${part}" in day-of-month field`)
+    }
+    return { kind: 'lastDayOfMonth', offset }
+  }
+
+  const nearestWeekdayMatch = part.match(/^(\d{1,2})W$/)
+  if (nearestWeekdayMatch) {
+    const day = Number(nearestWeekdayMatch[1])
+    if (day < 1 || day > 31) {
+      throw new Error(`invalid nearest-weekday value "${part}" in day-of-month field (expected 1-31)`)
+    }
+    return { kind: 'nearestWeekday', day }
+  }
+
+  return undefined
+}
+
+// "xL" (last occurrence of day x in the month) and "x#n" (nth occurrence of day x) - quartz day-of-week only.
+function parseDayOfWeekModifier(part: string): FieldValue | undefined {
+  const nthMatch = part.match(/^([A-Za-z]+|\d)#(\d+)$/)
+  if (nthMatch) {
+    const [, dayToken, nText] = nthMatch
+    const day = resolveToken(dayToken, 'day-of-week', 1, 7, DOW_NAMES)
+    const n = Number(nText)
+    if (n < 1 || n > 5) {
+      throw new Error(`invalid occurrence "${part}" in day-of-week field (expected #1-#5)`)
+    }
+    return { kind: 'nthWeekdayInMonth', day, n }
+  }
+
+  const lastMatch = part.match(/^([A-Za-z]+|\d)L$/)
+  if (lastMatch) {
+    const day = resolveToken(lastMatch[1], 'day-of-week', 1, 7, DOW_NAMES)
+    return { kind: 'lastWeekdayInMonth', day }
+  }
+
+  return undefined
+}
+
+function parseFieldPart(
+  part: string,
+  fieldName: string,
+  min: number,
+  max: number,
+  names?: readonly string[],
+  dayModifierField?: DayModifierField,
+): FieldValue {
   if (part === '*') return { kind: 'any' }
   if (part === '?') return { kind: 'unspecified' }
+
+  if (dayModifierField === 'dayOfMonth') {
+    const modifier = parseDayOfMonthModifier(part)
+    if (modifier) return modifier
+  }
+  if (dayModifierField === 'dayOfWeek') {
+    const modifier = parseDayOfWeekModifier(part)
+    if (modifier) return modifier
+  }
 
   const stepMatch = part.match(/^(.+)\/(\d+)$/)
   if (stepMatch) {
@@ -89,11 +173,18 @@ function parseFieldPart(part: string, fieldName: string, min: number, max: numbe
   return { kind: 'literal', value: resolveToken(part, fieldName, min, max, names) }
 }
 
-export function parseField(raw: string, fieldName: string, min: number, max: number, names?: readonly string[]): FieldValue[] {
+export function parseField(
+  raw: string,
+  fieldName: string,
+  min: number,
+  max: number,
+  names?: readonly string[],
+  dayModifierField?: DayModifierField,
+): FieldValue[] {
   if (raw.length === 0) {
     throw new Error(`${fieldName} field is empty`)
   }
-  return raw.split(',').map((part) => parseFieldPart(part.trim(), fieldName, min, max, names))
+  return raw.split(',').map((part) => parseFieldPart(part.trim(), fieldName, min, max, names, dayModifierField))
 }
 
 function assertNoUnspecified(fields: Array<[string, FieldValue[]]>) {
@@ -136,9 +227,9 @@ export function parseCron(expression: string, format: CronFormat): ParsedCron {
   const second = parseField(secondRaw, 'second', 0, 59)
   const minute = parseField(minuteRaw, 'minute', 0, 59)
   const hour = parseField(hourRaw, 'hour', 0, 23)
-  const dayOfMonth = parseField(domRaw, 'day-of-month', 1, 31)
+  const dayOfMonth = parseField(domRaw, 'day-of-month', 1, 31, undefined, 'dayOfMonth')
   const month = parseField(monthRaw, 'month', 1, 12, MONTH_NAMES)
-  const dayOfWeek = parseField(dowRaw, 'day-of-week', 1, 7, DOW_NAMES)
+  const dayOfWeek = parseField(dowRaw, 'day-of-week', 1, 7, DOW_NAMES, 'dayOfWeek')
   const year = yearRaw !== undefined ? parseField(yearRaw, 'year', 1970, 2099) : undefined
 
   assertNoUnspecified([
@@ -170,6 +261,16 @@ function formatValue(value: FieldValue, min: number, max: number): string {
       const base = value.start === min && value.end === max ? '*' : `${value.start}-${value.end}`
       return `${base}/${value.step}`
     }
+    case 'lastDayOfMonth':
+      return value.offset === undefined ? 'L' : `L-${value.offset}`
+    case 'lastWeekdayOfMonth':
+      return 'LW'
+    case 'nearestWeekday':
+      return `${value.day}W`
+    case 'lastWeekdayInMonth':
+      return `${value.day}L`
+    case 'nthWeekdayInMonth':
+      return `${value.day}#${value.n}`
   }
 }
 

@@ -57,3 +57,13 @@ test('quartzToUnix refuses a restricted year field', () => {
 test('quartzToUnix accepts an unrestricted year field', () => {
   assert.equal(quartzToUnix('0 0 9 1 * ? *'), '0 9 1 * *')
 })
+
+test('quartzToUnix refuses a day-of-month "L"/"W" modifier', () => {
+  assert.throws(() => quartzToUnix('0 0 9 L * ?'), /day-of-month modifiers/)
+  assert.throws(() => quartzToUnix('0 0 9 15W * ?'), /day-of-month modifiers/)
+})
+
+test('quartzToUnix refuses a day-of-week "L"/"#" modifier', () => {
+  assert.throws(() => quartzToUnix('0 0 9 ? * 6L'), /day modifiers/)
+  assert.throws(() => quartzToUnix('0 0 9 ? * MON#2'), /day modifiers/)
+})
