@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { formatCron, parseCron } from './cron'
+import { formatCron, parseCron, validateCron } from './cron'
+
+test('validateCron returns undefined for a valid expression', () => {
+  assert.equal(validateCron('30 4 * * 1-5', 'unix'), undefined)
+  assert.equal(validateCron('0 30 4 ? * 2-6', 'quartz'), undefined)
+})
+
+test('validateCron returns the parse error message for an invalid expression', () => {
+  assert.match(validateCron('61 4 * * *', 'unix') ?? '', /out of range/)
+  assert.match(validateCron('0 0 12 * * *', 'quartz') ?? '', /exactly one of/)
+  assert.match(validateCron('* * * *', 'unix') ?? '', /5 fields/)
+})
 
 test('parses a plain unix expression', () => {
   const parsed = parseCron('30 4 * * 1-5', 'unix')

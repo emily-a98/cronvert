@@ -59,6 +59,20 @@ On invalid input, `--json` prints `{"error": "..."}` to stdout and exits
 non-zero instead of throwing text at your terminal, so it's safe to pipe into
 other tools.
 
+## Validating
+
+`--validate-only` checks the syntax and reports the first error without
+converting anything, so `--to` isn't needed:
+
+```
+$ cronvert "61 4 * * *" --validate-only
+invalid unix cron expression: value 61 out of range for minute field (expected 0-59)
+```
+
+It exits non-zero when the expression is invalid. With `--json` it prints
+`{"valid": true, "format": "unix"}` or, on failure,
+`{"valid": false, "format": "unix", "error": "..."}`.
+
 ## Supported syntax
 
 Both dialects support `*`, single values, ranges (`1-5`), lists (`1,3,5`),

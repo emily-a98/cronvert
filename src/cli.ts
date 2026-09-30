@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { CronFormat, parseCron } from './cron'
+import { CronFormat, parseCron, validateCron } from './cron'
 import { quartzToUnix, unixToQuartz } from './convert'
 import { describe } from './describe'
 
@@ -7,6 +7,7 @@ const USAGE = `cronvert - convert between unix cron and quartz cron
 
 Usage:
   cronvert <expression> --to <unix|quartz> [--from <unix|quartz>] [--json]
+  cronvert <expression> --validate-only [--from <unix|quartz>] [--json]
 
 Examples:
   cronvert "30 4 * * 1-5" --to quartz
@@ -17,9 +18,10 @@ If --from is omitted it is guessed from the number of fields
 
 interface Options {
   expression: string
-  to: CronFormat
+  to?: CronFormat
   from?: CronFormat
   json: boolean
+  validateOnly: boolean
 }
 
 function isFormat(value: string): value is CronFormat {
@@ -31,11 +33,14 @@ function parseArgs(argv: string[]): Options {
   let to: string | undefined
   let from: string | undefined
   let json = false
+  let validateOnly = false
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--json') {
       json = true
+    } else if (arg === '--validate-only') {
+      validateOnly = true
     } else if (arg === '--to') {
       to = argv[++i]
     } else if (arg === '--from') {
@@ -50,11 +55,11 @@ function parseArgs(argv: string[]): Options {
   }
 
   if (expression === undefined) throw new Error('missing cron expression')
-  if (to === undefined) throw new Error('missing required flag: --to <unix|quartz>')
-  if (!isFormat(to)) throw new Error(`--to must be "unix" or "quartz", got "${to}"`)
+  if (to !== undefined && !isFormat(to)) throw new Error(`--to must be "unix" or "quartz", got "${to}"`)
   if (from !== undefined && !isFormat(from)) throw new Error(`--from must be "unix" or "quartz", got "${from}"`)
+  if (to === undefined && !validateOnly) throw new Error('missing required flag: --to <unix|quartz>')
 
-  return { expression, to, from, json }
+  return { expression, to, from, json, validateOnly }
 }
 
 function detectFormat(expression: string): CronFormat {
@@ -73,6 +78,21 @@ function run(argv: string[]): void {
 
   const options = parseArgs(argv)
   const from = options.from ?? detectFormat(options.expression)
+
+  if (options.validateOnly) {
+    const problem = validateCron(options.expression, from)
+    if (options.json) {
+      console.log(JSON.stringify(problem === undefined ? { valid: true, format: from } : { valid: false, format: from, error: problem }, null, 2))
+    } else if (problem === undefined) {
+      console.log(`valid ${from} cron expression`)
+    } else {
+      console.error(`invalid ${from} cron expression: ${problem}`)
+    }
+    if (problem !== undefined) process.exitCode = 1
+    return
+  }
+
+  if (options.to === undefined) throw new Error('missing required flag: --to <unix|quartz>')
 
   const parsedInput = parseCron(options.expression, from)
   const converted =

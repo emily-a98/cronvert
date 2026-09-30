@@ -247,6 +247,16 @@ export function parseCron(expression: string, format: CronFormat): ParsedCron {
   return { format: 'quartz', second, minute, hour, dayOfMonth, month, dayOfWeek, year }
 }
 
+// Returns the syntax error message, or undefined if the expression parses.
+export function validateCron(expression: string, format: CronFormat): string | undefined {
+  try {
+    parseCron(expression, format)
+    return undefined
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err)
+  }
+}
+
 function formatValue(value: FieldValue, min: number, max: number): string {
   switch (value.kind) {
     case 'any':
